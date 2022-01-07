@@ -1,4 +1,4 @@
-# conjugate-gradient-cuda-eigen
+#cholesky-decomposition-cuda-eigen
 GPU based implementation of a Cholesky Decomposition based linear solver using CUDA Thrust and cuSOLVER, also featuring Eigen for the purpose of verification and runtime comparison. The aim of this repository is to use high-level, possibly template-based APIs to reduce development time and avoid writing boilerplate code for memory management, cleanup etc.
 
 The system being solved is Ax=b. 'A' is set to an identity matrix of appropriate size and thus, the eventual solution becomes 'x = inverse(A) * b = b'. Thus, if everything works as they should, the solution should be identical to the initial vector 'b' (set randomly).
