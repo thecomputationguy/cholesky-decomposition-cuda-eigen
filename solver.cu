@@ -1,10 +1,6 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
-#include <thrust/generate.h>
-#include <thrust/sort.h>
-#include <thrust/copy.h>
 #include <fstream>
-#include <algorithm>
 #include <cstdlib>
 #include <chrono>
 #include <Eigen/Dense>
