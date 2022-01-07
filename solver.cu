@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
     {
         int size = sizes[j];        
 
-        // Create CUDA instances and habdles
+        // Create CUDA instances and handles
         cudaError cudaStatus;
         cusolverStatus_t cusolverStatus ;
         cusolverDnHandle_t handle;
