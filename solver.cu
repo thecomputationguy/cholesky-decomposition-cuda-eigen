@@ -88,9 +88,9 @@ int main(int argc, char* argv[])
         Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size()); // map the device vector to a host container  
 
         std::cout<<"\nResolution : "<<size<<std::endl;
-        std::cout<<"\tGPU (microseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count();
-        std::cout<<"\n\tCPU : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_cpu).count();
-        std::cout<<"\n\tDifference (in 2 Norm) (milliseconds) : "<<(x - x_gpu).squaredNorm()<<std::endl;
+        std::cout<<"\tGPU (milliseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count();
+        std::cout<<"\n\tCPU (milliseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_cpu).count();
+        std::cout<<"\n\tDifference (in 2 Norm) : "<<(x - x_gpu).squaredNorm()<<std::endl;
 
         // Write measurements to file
         out<<size<<","<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_cpu).count()<<","<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count()<<"\n";
