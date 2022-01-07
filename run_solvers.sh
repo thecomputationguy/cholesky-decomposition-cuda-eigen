@@ -8,7 +8,7 @@ printf "\nDone.\n"
 
 printf "\nCompiling program...\n"
 
-nvcc -std=c++17 -Xcompiler -fopenmp -I /usr/local/include/eigen3 solver.cu -lcusolver -o cholesky.out
+nvcc -std=c++17 -Xcompiler -fopenmp -I /usr/local/include/eigen3 main.cu -lcusolver -o cholesky.out
 
 printf "\nDone.\n"
 
