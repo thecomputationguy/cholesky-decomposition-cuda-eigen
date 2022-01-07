@@ -19,15 +19,16 @@
 int main(int argc, char* argv[])
 {
     std::cout<<"\n***** Starting Cholesky Solvers *****"<<std::endl;
-    int sizes[8] = {10, 100, 200, 500, 800, 1000, 2000, 3000};
-    Eigen::setNbThreads(6);
 
-    std::ofstream out("measurements.csv");
+    int sizes[8] = {10, 100, 200, 500, 800, 1000, 2000, 3000};
+    Eigen::setNbThreads(6); // To enable multithreaded computation, if and when available.
+
+    std::ofstream out("measurements.csv"); // to store the measurement data
     out<<"Resolution,CPU,GPU\n";
+
     for(int j = 0; j < 8; j++)
     {
-        int size = sizes[j];
-        
+        int size = sizes[j];        
 
         // Create CUDA instances and habdles
         cudaError cudaStatus;
@@ -48,7 +49,7 @@ int main(int argc, char* argv[])
         x = Eigen::VectorXf::Random(size);
 
         // Obtain pointers of the Eigen data so that they can be copied into Thrust vectors
-        float *A_eigen = A.data();
+        float *A_eigen = A.data(); 
         float *b_eigen = b.data();
         int Lwork, *d_info;
 
@@ -58,31 +59,37 @@ int main(int argc, char* argv[])
         thrust::host_vector<float> info;
         thrust::device_vector<float> d_A = mat_A;
         thrust::device_vector<float> d_b = vec_b;    
-        cudaStatus = cudaMalloc((void **) &d_info, sizeof(int));    
+        cudaStatus = cudaMalloc((void **) &d_info, sizeof(int));  
+
         cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER ;
         cusolverStatus = cusolverDnSpotrf_bufferSize(handle, uplo, size, d_A.data().get(), size, &Lwork);
+        
         thrust::host_vector<float> Work(Lwork);
         thrust::device_vector<float> d_Work = Work;
 
         // Solve on the GPU
         auto start = std::chrono::high_resolution_clock::now();
+
         cusolverStatus = cusolverDnSpotrf(handle, uplo, size, d_A.data().get(), size, d_Work.data().get(), Lwork, d_info);
         cusolverStatus = cusolverDnSpotrs(handle, uplo, size, 1, d_A.data().get(), size, d_b.data().get(), size, d_info);
         cudaStatus = cudaDeviceSynchronize();
+        
         auto stop = std::chrono::high_resolution_clock::now();
         auto duration_gpu = (stop - start);
 
         // Solve on the CPU
         start = std::chrono::high_resolution_clock::now();
+
         Eigen::LDLT<Eigen::MatrixXf> ldlt(size);
         ldlt.compute(A);
         x = ldlt.solve(b);
+
         stop = std::chrono::high_resolution_clock::now();
         auto duration_cpu = (stop - start);
 
         // Check results
-        vec_b = d_b;
-        Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size());    
+        vec_b = d_b; // get the device vector pointers
+        Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size()); // map the device vector to a host container  
 
         std::cout<<"\nResolution : "<<size<<std::endl;
         std::cout<<"\tGPU (microseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count();
