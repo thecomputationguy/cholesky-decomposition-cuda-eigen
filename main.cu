@@ -18,8 +18,8 @@ int main(int argc, char* argv[])
 
     int sizes[] = {200, 500, 800, 1000, 2000, 3000, 4000, 5000};
     Eigen::setNbThreads(6); // To enable multithreaded computation, if and when available.
-    std::chrono::steady_clock::time_point start;
-    std::chrono::steady_clock::time_point stop;
+    std::chrono::steady_clock::time_point start; // start timer
+    std::chrono::steady_clock::time_point stop; // stop timer
 
     std::ofstream out("measurements.csv"); // to store the measurement data
     out<<"Resolution,CPU,GPU,GPU-Speedup\n";
