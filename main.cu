@@ -16,11 +16,13 @@ int main(int argc, char* argv[])
 {
     std::cout<<"\n***** Starting Cholesky Solvers *****"<<std::endl;
 
-    int sizes[8] = {10, 100, 200, 500, 800, 1000, 2000, 3000};
+    int sizes[] = {200, 500, 800, 1000, 2000, 3000, 4000, 5000};
     Eigen::setNbThreads(6); // To enable multithreaded computation, if and when available.
+    std::chrono::steady_clock::time_point start;
+    std::chrono::steady_clock::time_point stop;
 
     std::ofstream out("measurements.csv"); // to store the measurement data
-    out<<"Resolution,CPU,GPU\n";
+    out<<"Resolution,CPU,GPU,GPU-Speedup\n";
 
     for(int j = 0; j < 8; j++)
     {
@@ -64,36 +66,38 @@ int main(int argc, char* argv[])
         thrust::device_vector<float> d_Work = Work;
 
         // Solve on the GPU
-        auto start = std::chrono::high_resolution_clock::now();
+        start = std::chrono::steady_clock::now();
 
         cusolverStatus = cusolverDnSpotrf(handle, uplo, size, d_A.data().get(), size, d_Work.data().get(), Lwork, d_info);
         cusolverStatus = cusolverDnSpotrs(handle, uplo, size, 1, d_A.data().get(), size, d_b.data().get(), size, d_info);
         cudaStatus = cudaDeviceSynchronize();
         
-        auto stop = std::chrono::high_resolution_clock::now();
-        auto duration_gpu = (stop - start);
+        stop = std::chrono::steady_clock::now();
+        auto duration_gpu = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
 
         // Solve on the CPU
-        start = std::chrono::high_resolution_clock::now();
+        start = std::chrono::steady_clock::now();
 
         Eigen::LDLT<Eigen::MatrixXf> ldlt(size);
         ldlt.compute(A);
         x = ldlt.solve(b);
 
-        stop = std::chrono::high_resolution_clock::now();
-        auto duration_cpu = (stop - start);
+        stop = std::chrono::steady_clock::now();
+        auto duration_cpu = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+        auto speedup = duration_cpu / duration_gpu;
 
         // Check results
         vec_b = d_b; // get the device vector pointers
         Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size()); // map the device vector to a host container  
 
         std::cout<<"\nResolution : "<<size<<std::endl;
-        std::cout<<"\tGPU (milliseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count();
-        std::cout<<"\n\tCPU (milliseconds) : "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_cpu).count();
+        std::cout<<"\tGPU (milliseconds) : "<<duration_gpu / 1000;
+        std::cout<<"\n\tCPU (milliseconds) : "<<duration_cpu / 1000;
         std::cout<<"\n\tDifference (in 2 Norm) : "<<(x - x_gpu).squaredNorm()<<std::endl;
+        std::cout<<"\n\tGPU Speedup : "<<speedup<<std::endl;
 
         // Write measurements to file
-        out<<size<<","<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_cpu).count()<<","<<std::chrono::duration_cast<std::chrono::milliseconds>(duration_gpu).count()<<"\n";
+        out<<size<<","<<duration_cpu / 1000<<","<<duration_gpu / 1000<<","<<speedup<<"\n";
     }
 
     out.close();    
