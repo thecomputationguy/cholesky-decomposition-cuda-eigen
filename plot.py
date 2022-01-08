@@ -3,7 +3,7 @@ import pandas as pd
 
 if __name__ == '__main__':
     data = pd.read_csv("measurements.csv", sep=',')
-    print('***** Measurement Summary *****')
+    print('\n***** Measurement Summary *****')
     print(data)
     fig, (ax1, ax2) = plt.subplots(1,2, figsize=(10,5))
     fig.suptitle('Runtime Comparison and Speedup (Cholesky Solver)')

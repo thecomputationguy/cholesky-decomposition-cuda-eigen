@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
 
     for(int j = 0; j < 8; j++)
     {
-        int size = sizes[j];        
+        int size = sizes[j];
 
         // Create CUDA instances and handles
         cudaError cudaStatus;
@@ -34,17 +34,16 @@ int main(int argc, char* argv[])
         cusolverDnHandle_t handle;
         cusolverStatus = cusolverDnCreate(&handle);
 
-        /* Create data structures in Eigen. 
-           Equation considered is Ax=b, with A = I, b and x are random
-           In the end, the solution should be x = b.
+        /* 
+        Create data structures in Eigen. 
+        Equation considered is Ax=b, with A = I, b and x are random
+        In the end, the solution should be x = b.
         */
         
         Eigen::MatrixXf A(size, size);
-        Eigen::VectorXf b(size);
-        Eigen::VectorXf x(size);
+        Eigen::VectorXf b(size), x(size);
         A = Eigen::MatrixXf::Identity(size, size);
-        b = Eigen::VectorXf::Random(size);
-        x = Eigen::VectorXf::Random(size);
+        b = x = Eigen::VectorXf::Random(size);
 
         // Obtain pointers of the Eigen data so that they can be copied into Thrust vectors
         float *A_eigen = A.data(); 
