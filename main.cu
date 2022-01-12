@@ -1,7 +1,6 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <fstream>
-#include <cstdlib>
 #include <chrono>
 #include <Eigen/Dense>
 #include <cuda.h>
@@ -10,23 +9,23 @@
 #include <cusolverDn.h>
 #include <omp.h>
 
-#define NUM_THREADS 6;
+std::vector<int> read_file(); // forward declaraion of the method to read resolutions
 
 int main(int argc, char* argv[])
 {
     std::cout<<"\n***** Starting Cholesky Solvers *****"<<std::endl;
 
-    int sizes[] = {200, 500, 800, 1000, 2000, 3000, 4000, 5000};
-    Eigen::setNbThreads(6); // To enable multithreaded computation, if and when available.
+    std::vector<int> resolutions = read_file();
+    Eigen::setNbThreads(omp_get_max_threads()); // To enable multithreaded computation, if and when available.
     std::chrono::steady_clock::time_point start; // start timer
     std::chrono::steady_clock::time_point stop; // stop timer
 
     std::ofstream out("measurements.csv"); // to store the measurement data
     out<<"Resolution,CPU,GPU,GPU-Speedup\n";
 
-    for(int j = 0; j < 8; j++)
+    for(int j = 0; j < resolutions.size(); j++)
     {
-        int size = sizes[j];
+        int size = resolutions[j];
 
         // Create CUDA instances and handles
         cudaError cudaStatus;
@@ -101,4 +100,27 @@ int main(int argc, char* argv[])
 
     out.close();    
     return 0;
+}
+
+
+std::vector<int> read_file()
+{
+    /*
+        Method to read resolutions.
+    */
+
+    std::string filename = "resolutions.txt";
+    std::vector<int> resolutions;
+    std::string size;
+    std::fstream file(filename, std::ios::in);
+
+    if(file.is_open())
+    {
+        while(std::getline(file, size))
+        {
+            resolutions.push_back(stoi(size));
+        }
+    }
+
+    return resolutions;
 }

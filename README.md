@@ -3,6 +3,8 @@ GPU based implementation of a Cholesky Decomposition based linear solver using C
 
 The system being solved is Ax=b. 'A' is set to an identity matrix of appropriate size and thus, the eventual solution becomes 'x = inverse(A) * b = b'. Thus, if everything works as they should, the solution should be identical to the initial vector 'b' (set randomly).
 
+The problem sizes are defined in the file 'resolutions.txt'. To add another resolution, just append it below the last one.
+
 To be able to run everything properly, one needs the following libraries and ensure that the NVCC compiler is able to find their include paths. This should not be an issue for the CUDA libraries but might be for the external libraries such as Eigen.
 
     1. CUDA
