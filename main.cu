@@ -57,24 +57,17 @@ int main(int argc, char* argv[])
         b = A * x_true;
         x = x_true;
 
-        // Obtain pointers of the Eigen data so that they can be copied into Thrust vectors
-        float *A_eigen = A.data(); 
-        float *b_eigen = b.data();
         int Lwork, *d_info;
 
-        // Create host and device data in Thrust
-        thrust::host_vector<float> mat_A(A_eigen, A_eigen + A.size());
-        thrust::host_vector<float> vec_b(b_eigen, b_eigen + b.size());
-        thrust::host_vector<float> info;
-        thrust::device_vector<float> d_A = mat_A;
-        thrust::device_vector<float> d_b = vec_b;    
+        // Create device data in Thrust directly from the Eigen host data (no intermediate host copies)
+        thrust::device_vector<float> d_A(A.data(), A.data() + A.size());
+        thrust::device_vector<float> d_b(b.data(), b.data() + b.size());
         cudaStatus = cudaMalloc((void **) &d_info, sizeof(int));  
 
         cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER ;
         cusolverStatus = cusolverDnSpotrf_bufferSize(handle, uplo, size, d_A.data().get(), size, &Lwork);
         
-        thrust::host_vector<float> Work(Lwork);
-        thrust::device_vector<float> d_Work = Work;
+        thrust::device_vector<float> d_Work(Lwork);
 
         // Solve on the GPU
         start = std::chrono::steady_clock::now();
@@ -97,9 +90,9 @@ int main(int argc, char* argv[])
         auto duration_cpu = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
         auto speedup = duration_cpu / duration_gpu;
 
-        // Check results
-        vec_b = d_b; // get the device vector pointers
-        Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size()); // map the device vector to a host container  
+        // Check results : copy the GPU solution (device -> host) directly into an Eigen vector
+        Eigen::VectorXf x_gpu(size);
+        thrust::copy(d_b.begin(), d_b.end(), x_gpu.data());
 
         // Error against the known exact solution, and condition number of A
         double rel_err_cpu = (x - x_true).norm() / x_true.norm();
