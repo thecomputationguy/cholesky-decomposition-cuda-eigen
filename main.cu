@@ -2,6 +2,7 @@
 #include <thrust/device_vector.h>
 #include <fstream>
 #include <chrono>
+#include <iomanip>
 #include <Eigen/Dense>
 #include <cuda.h>
 #include <cublas_v2.h>
@@ -32,6 +33,26 @@ int main(int argc, char* argv[])
 
     std::ofstream out("measurements.csv"); // to store the measurement data
     out<<"Resolution,CPU,GPU,GPU-Speedup,Cond,CPU-RelErr,GPU-RelErr\n";
+
+    // Warm-up : the first cuSOLVER call pays one-time costs (context creation, module loading).
+    // Do a small untimed solve so that cost is not attributed to the first measured resolution.
+    {
+        const int n = 64;
+        int lwork, *dinfo;
+        cusolverDnHandle_t whandle;
+        cusolverDnCreate(&whandle);
+        Eigen::MatrixXf I = Eigen::MatrixXf::Identity(n, n);
+        thrust::device_vector<float> wA(I.data(), I.data() + I.size());
+        thrust::device_vector<float> wb(n, 1.0f);
+        cudaMalloc((void **) &dinfo, sizeof(int));
+        cusolverDnSpotrf_bufferSize(whandle, CUBLAS_FILL_MODE_LOWER, n, wA.data().get(), n, &lwork);
+        thrust::device_vector<float> wWork(lwork);
+        cusolverDnSpotrf(whandle, CUBLAS_FILL_MODE_LOWER, n, wA.data().get(), n, wWork.data().get(), lwork, dinfo);
+        cusolverDnSpotrs(whandle, CUBLAS_FILL_MODE_LOWER, n, 1, wA.data().get(), n, wb.data().get(), n, dinfo);
+        cudaDeviceSynchronize();
+        cudaFree(dinfo);
+        cusolverDnDestroy(whandle);
+    }
 
     for(int j = 0; j < resolutions.size(); j++)
     {
@@ -70,6 +91,7 @@ int main(int argc, char* argv[])
         thrust::device_vector<float> d_Work(Lwork);
 
         // Solve on the GPU
+        cudaStatus = cudaDeviceSynchronize(); // make sure no earlier work is still in flight
         start = std::chrono::steady_clock::now();
 
         cusolverStatus = cusolverDnSpotrf(handle, uplo, size, d_A.data().get(), size, d_Work.data().get(), Lwork, d_info);
@@ -77,7 +99,7 @@ int main(int argc, char* argv[])
         cudaStatus = cudaDeviceSynchronize();
         
         stop = std::chrono::steady_clock::now();
-        auto duration_gpu = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+        double duration_gpu = std::chrono::duration<double, std::milli>(stop - start).count(); // milliseconds
 
         // Solve on the CPU
         start = std::chrono::steady_clock::now();
@@ -87,8 +109,8 @@ int main(int argc, char* argv[])
         x = ldlt.solve(b);
 
         stop = std::chrono::steady_clock::now();
-        auto duration_cpu = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-        auto speedup = duration_cpu / duration_gpu;
+        double duration_cpu = std::chrono::duration<double, std::milli>(stop - start).count(); // milliseconds
+        double speedup = duration_cpu / duration_gpu;
 
         // Check results : copy the GPU solution (device -> host) directly into an Eigen vector
         Eigen::VectorXf x_gpu(size);
@@ -100,10 +122,12 @@ int main(int argc, char* argv[])
         double cond = condition_number_analytic(matrix_type, size);
 
         std::cout<<"\nResolution : "<<size<<std::endl;
-        std::cout<<"\tGPU (milliseconds) : "<<duration_gpu / 1000;
-        std::cout<<"\n\tCPU (milliseconds) : "<<duration_cpu / 1000;
+        std::cout<<std::fixed<<std::setprecision(3);
+        std::cout<<"\tGPU (milliseconds) : "<<duration_gpu;
+        std::cout<<"\n\tCPU (milliseconds) : "<<duration_cpu;
+        std::cout<<std::defaultfloat<<std::setprecision(6);
         std::cout<<"\n\tDifference (in 2 Norm) : "<<(x - x_gpu).squaredNorm()<<std::endl;
-        std::cout<<"\n\tGPU Speedup : "<<speedup<<std::endl;
+        std::cout<<"\n\tGPU Speedup : "<<std::fixed<<std::setprecision(2)<<speedup<<std::defaultfloat<<std::setprecision(6)<<std::endl;
         std::cout<<"\n\tCondition number (analytic) : "<<cond;
         if(size <= 1000) // O(n^3) eigendecomposition is only affordable for small sizes
         {
@@ -114,7 +138,7 @@ int main(int argc, char* argv[])
         std::cout<<"\n\tRelative error vs exact (GPU) : "<<rel_err_gpu<<std::endl;
 
         // Write measurements to file
-        out<<size<<","<<duration_cpu / 1000<<","<<duration_gpu / 1000<<","<<speedup<<","<<cond<<","<<rel_err_cpu<<","<<rel_err_gpu<<"\n";
+        out<<size<<","<<duration_cpu<<","<<duration_gpu<<","<<speedup<<","<<cond<<","<<rel_err_cpu<<","<<rel_err_gpu<<"\n";
 
         // Release CUDA resources created in this iteration
         cudaStatus = cudaFree(d_info);
