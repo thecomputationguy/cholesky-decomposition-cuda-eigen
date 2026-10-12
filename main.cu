@@ -10,10 +10,20 @@
 #include <omp.h>
 
 std::vector<int> read_file(); // forward declaraion of the method to read resolutions
+Eigen::MatrixXf make_tridiagonal(int size); // SPD tridiagonal matrix tridiag(-1, 2, -1)
+double condition_number_analytic(const std::string& matrix_type, int size); // closed-form 2-norm condition number
 
 int main(int argc, char* argv[])
 {
-    std::cout<<"\n***** Starting Cholesky Solvers *****"<<std::endl;
+    // Matrix to be solved : "tridiagonal" (default) or "identity"
+    std::string matrix_type = (argc > 1) ? argv[1] : "tridiagonal";
+    if(matrix_type != "tridiagonal" && matrix_type != "identity")
+    {
+        std::cerr<<"Unknown matrix type '"<<matrix_type<<"'. Use 'tridiagonal' or 'identity'."<<std::endl;
+        return 1;
+    }
+
+    std::cout<<"\n***** Starting Cholesky Solvers (matrix : "<<matrix_type<<") *****"<<std::endl;
 
     std::vector<int> resolutions = read_file();
     Eigen::setNbThreads(omp_get_max_threads()); // To enable multithreaded computation, if and when available.
@@ -21,7 +31,7 @@ int main(int argc, char* argv[])
     std::chrono::steady_clock::time_point stop; // stop timer
 
     std::ofstream out("measurements.csv"); // to store the measurement data
-    out<<"Resolution,CPU,GPU,GPU-Speedup\n";
+    out<<"Resolution,CPU,GPU,GPU-Speedup,Cond,CPU-RelErr,GPU-RelErr\n";
 
     for(int j = 0; j < resolutions.size(); j++)
     {
@@ -35,14 +45,17 @@ int main(int argc, char* argv[])
 
         /* 
         Create data structures in Eigen. 
-        Equation considered is Ax=b, with A = I, b and x are random
-        In the end, the solution should be x = b.
+        Equation considered is Ax=b, with x_true random and b = A * x_true, so the exact solution is known.
+        identity    : A = I, thus x = b.
+        tridiagonal : A = tridiag(-1, 2, -1), the SPD 1D Laplacian.
         */
         
         Eigen::MatrixXf A(size, size);
         Eigen::VectorXf b(size), x(size);
-        A = Eigen::MatrixXf::Identity(size, size);
-        b = x = Eigen::VectorXf::Random(size);
+        Eigen::VectorXf x_true = Eigen::VectorXf::Random(size);
+        A = (matrix_type == "identity") ? Eigen::MatrixXf(Eigen::MatrixXf::Identity(size, size)) : make_tridiagonal(size);
+        b = A * x_true;
+        x = x_true;
 
         // Obtain pointers of the Eigen data so that they can be copied into Thrust vectors
         float *A_eigen = A.data(); 
@@ -88,14 +101,27 @@ int main(int argc, char* argv[])
         vec_b = d_b; // get the device vector pointers
         Eigen::Map<Eigen::VectorXf> x_gpu(vec_b.data(), x.size()); // map the device vector to a host container  
 
+        // Error against the known exact solution, and condition number of A
+        double rel_err_cpu = (x - x_true).norm() / x_true.norm();
+        double rel_err_gpu = (x_gpu - x_true).norm() / x_true.norm();
+        double cond = condition_number_analytic(matrix_type, size);
+
         std::cout<<"\nResolution : "<<size<<std::endl;
         std::cout<<"\tGPU (milliseconds) : "<<duration_gpu / 1000;
         std::cout<<"\n\tCPU (milliseconds) : "<<duration_cpu / 1000;
         std::cout<<"\n\tDifference (in 2 Norm) : "<<(x - x_gpu).squaredNorm()<<std::endl;
         std::cout<<"\n\tGPU Speedup : "<<speedup<<std::endl;
+        std::cout<<"\n\tCondition number (analytic) : "<<cond;
+        if(size <= 1000) // O(n^3) eigendecomposition is only affordable for small sizes
+        {
+            Eigen::VectorXd ev = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd>(A.cast<double>(), Eigen::EigenvaluesOnly).eigenvalues();
+            std::cout<<"\n\tCondition number (numeric)  : "<<ev(size - 1) / ev(0);
+        }
+        std::cout<<"\n\tRelative error vs exact (CPU) : "<<rel_err_cpu;
+        std::cout<<"\n\tRelative error vs exact (GPU) : "<<rel_err_gpu<<std::endl;
 
         // Write measurements to file
-        out<<size<<","<<duration_cpu / 1000<<","<<duration_gpu / 1000<<","<<speedup<<"\n";
+        out<<size<<","<<duration_cpu / 1000<<","<<duration_gpu / 1000<<","<<speedup<<","<<cond<<","<<rel_err_cpu<<","<<rel_err_gpu<<"\n";
 
         // Release CUDA resources created in this iteration
         cudaStatus = cudaFree(d_info);
@@ -127,4 +153,38 @@ std::vector<int> read_file()
     }
 
     return resolutions;
+}
+
+Eigen::MatrixXf make_tridiagonal(int size)
+{
+    /*
+        Symmetric positive definite tridiagonal matrix tridiag(-1, 2, -1),
+        i.e. the 1D Poisson / Laplacian stencil.
+    */
+
+    Eigen::MatrixXf A = Eigen::MatrixXf::Zero(size, size);
+    for(int i = 0; i < size; i++)
+    {
+        A(i, i) = 2.0f;
+        if(i > 0)        A(i, i - 1) = -1.0f;
+        if(i < size - 1) A(i, i + 1) = -1.0f;
+    }
+    return A;
+}
+
+double condition_number_analytic(const std::string& matrix_type, int size)
+{
+    /*
+        Closed-form 2-norm condition number.
+        tridiag(-1, 2, -1) has eigenvalues l_k = 2 - 2cos(k*pi/(n+1)), k = 1..n,
+        so cond = l_n / l_1 = cot^2(pi / (2(n+1))) ~ 4(n+1)^2 / pi^2.
+    */
+
+    if(matrix_type == "identity")
+        return 1.0;
+
+    const double pi = 3.14159265358979323846;
+    double l_min = 2.0 - 2.0 * std::cos(pi / (size + 1));
+    double l_max = 2.0 - 2.0 * std::cos(size * pi / (size + 1));
+    return l_max / l_min;
 }
