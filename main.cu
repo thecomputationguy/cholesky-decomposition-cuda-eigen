@@ -96,6 +96,10 @@ int main(int argc, char* argv[])
 
         // Write measurements to file
         out<<size<<","<<duration_cpu / 1000<<","<<duration_gpu / 1000<<","<<speedup<<"\n";
+
+        // Release CUDA resources created in this iteration
+        cudaStatus = cudaFree(d_info);
+        cusolverStatus = cusolverDnDestroy(handle);
     }
 
     out.close();    
